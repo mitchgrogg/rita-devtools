@@ -57,7 +57,7 @@ Replace `MyNetwork`, `mypassword`, and `mitmproxypass` with your desired values.
 
 - **Connect devices** to the Wi-Fi network you configured.
 - **mitmproxy web UI** is available at `http://<pi-eth0-ip>:8081`. Configure devices to use `<pi-eth0-ip>:8080` as their HTTP proxy to inspect traffic.
-- **rita-mitm API** is available at `http://<pi-eth0-ip>:8082/api/config` for configuring delays and response alterations.
+- **rita-mitm API** is available at `http://<pi-eth0-ip>:8082/api/config` for configuring delays and response alterations. A TUI app for interacting with the API is available at [rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui).
 - **SSH login** will show the mitmproxy web UI URL.
 
 ## Running Individual Scripts
@@ -89,6 +89,10 @@ All scripts must be run as root (`sudo`).
 ## rita-mitm
 
 rita-mitm is a mitmproxy addon that exposes a REST API (port 8082) for configuring request delays and response alterations at runtime. Configuration is persisted to a Docker volume and survives container restarts.
+
+### TUI App
+
+[rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui) can be used to configure this addon via the REST API. Or the REST API can be used directly or with custom tooling.
 
 ### API endpoints
 
