@@ -20,6 +20,7 @@ MITMPROXY_PASSWORD="$3"
 bash ./setup-scripts/setup-docker.sh
 bash ./setup-scripts/setup-hotspot.sh "$HOTSPOT_SSID" "$HOTSPOT_PASSWORD"
 bash ./setup-scripts/setup-mitmproxy.sh "$MITMPROXY_PASSWORD"
+bash ./setup-scripts/setup-tui.sh
 
 # Always run this last
 bash ./setup-scripts/setup-ssh-welcome.sh

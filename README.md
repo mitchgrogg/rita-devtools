@@ -4,12 +4,13 @@ rita-devtools (Router for Inspecting Traffic and Attenuation) are a collection o
 
 ## What It Does
 
-Running `setup.sh` installs and configures four things:
+Running `setup.sh` installs and configures five things:
 
 1. **Docker** — Installs Docker Engine from the official Debian repository.
 2. **Wi-Fi Hotspot** — Configures the Pi as a 5 GHz Wi-Fi access point using `hostapd` and `dnsmasq`. Devices that connect get internet access routed through the Pi's ethernet (`eth0`) connection via NAT.
 3. **mitmproxy + rita-mitm** — Runs [mitmproxy](https://mitmproxy.org/) in a Docker container with the web UI enabled and the [rita-mitm addon](#rita-mitm) loaded, allowing you to inspect and modify HTTP/HTTPS traffic passing through the Pi. The addon exposes a REST API for configuring request delays and response alterations at runtime.
-4. **SSH Welcome Message** — Adds a custom MOTD that shows the mitmproxy web UI URL when you SSH into the Pi.
+4. **rita-devtools-tui** — Installs the latest release of [rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui), a TUI app for configuring rita-mitm, and sets the `RITA_MITM_URL` environment variable to point to the local rita-mitm instance.
+5. **SSH Welcome Message** — Adds a custom MOTD that shows the mitmproxy web UI URL when you SSH into the Pi.
 
 ## Prerequisites
 
@@ -57,7 +58,8 @@ Replace `MyNetwork`, `mypassword`, and `mitmproxypass` with your desired values.
 
 - **Connect devices** to the Wi-Fi network you configured.
 - **mitmproxy web UI** is available at `http://<pi-eth0-ip>:8081`. Configure devices to use `<pi-eth0-ip>:8080` as their HTTP proxy to inspect traffic.
-- **rita-mitm API** is available at `http://<pi-eth0-ip>:8082/api/config` for configuring delays and response alterations. A TUI app for interacting with the API is available at [rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui).
+- **rita-mitm API** is available at `http://<pi-eth0-ip>:8082/api/config` for configuring delays and response alterations.
+- **rita-devtools-tui** is preinstalled and preconfigured. Run `rita-devtools-tui` to configure rita-mitm from the terminal. It can also be [downloaded](https://github.com/mitchgrogg/rita-devtools-tui/releases) onto another machine to configure rita-mitm remotely — set `RITA_MITM_URL` to `http://<pi-eth0-ip>:8082` before running it.
 - **SSH login** will show the mitmproxy web UI URL.
 
 ## Running Individual Scripts
@@ -69,6 +71,7 @@ Each script in `setup-scripts/` can be run independently:
 | `setup-docker.sh`                    | Install Docker Engine               |
 | `setup-hotspot.sh <ssid> <password>` | Configure Wi-Fi hotspot             |
 | `setup-mitmproxy.sh <password>`      | Run mitmproxy in Docker             |
+| `setup-tui.sh`                       | Install rita-devtools-tui           |
 | `setup-ssh-welcome.sh`               | Configure SSH MOTD with status info |
 
 All scripts must be run as root (`sudo`).
@@ -92,7 +95,11 @@ rita-mitm is a mitmproxy addon that exposes a REST API (port 8082) for configuri
 
 ### TUI App
 
-[rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui) can be used to configure this addon via the REST API. Or the REST API can be used directly or with custom tooling.
+[rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui) is preinstalled on the rita-devtools host and preconfigured to connect to the local rita-mitm instance. Run `rita-devtools-tui` to use it.
+
+It can also be [downloaded](https://github.com/mitchgrogg/rita-devtools-tui/releases) onto another machine to configure rita-mitm remotely. Set the `RITA_MITM_URL` environment variable to point to the rita-mitm instance (e.g. `export RITA_MITM_URL=http://<pi-eth0-ip>:8082`) before running it.
+
+The REST API can also be used directly or with custom tooling.
 
 ### API endpoints
 
