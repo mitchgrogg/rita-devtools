@@ -8,7 +8,7 @@ Running `setup.sh` installs and configures five things:
 
 1. **Docker** — Installs Docker Engine from the official Debian repository.
 2. **Wi-Fi Hotspot** — Configures the Pi as a 5 GHz Wi-Fi access point using `hostapd` and `dnsmasq`. Devices that connect get internet access routed through the Pi's ethernet (`eth0`) connection via NAT.
-3. **mitmproxy + rita-mitm** — Runs [mitmproxy](https://mitmproxy.org/) in a Docker container with the web UI enabled and the [rita-mitm addon](#rita-mitm) loaded, allowing you to inspect and modify HTTP/HTTPS traffic passing through the Pi. The addon exposes a REST API for configuring request delays and response alterations at runtime.
+3. **mitmproxy + rita-mitm** — Runs [mitmproxy](https://mitmproxy.org/) in a Docker container with the web UI enabled and the [rita-mitm addon](#rita-mitm) loaded, allowing you to inspect and modify HTTP/HTTPS traffic passing through the Pi. The addon exposes a REST API for configuring request delays and request/response alterations at runtime.
 4. **rita-devtools-tui** — Installs the latest release of [rita-devtools-tui](https://github.com/mitchgrogg/rita-devtools-tui), a TUI app for configuring rita-mitm, and sets the `RITA_MITM_URL` environment variable to point to the local rita-mitm instance.
 5. **SSH Welcome Message** — Adds a custom MOTD that shows the mitmproxy web UI URL when you SSH into the Pi.
 
@@ -58,7 +58,7 @@ Replace `MyNetwork`, `mypassword`, and `mitmproxypass` with your desired values.
 
 - **Connect devices** to the Wi-Fi network you configured.
 - **mitmproxy web UI** is available at `http://<pi-eth0-ip>:8081`. Configure devices to use `<pi-eth0-ip>:8080` as their HTTP proxy to inspect traffic.
-- **rita-mitm API** is available at `http://<pi-eth0-ip>:8082/api/config` for configuring delays and response alterations.
+- **rita-mitm API** is available at `http://<pi-eth0-ip>:8082/api/config` for configuring delays and request/response alterations.
 - **rita-devtools-tui** is preinstalled and preconfigured. Run `rita-devtools-tui` to configure rita-mitm from the terminal. It can also be [downloaded](https://github.com/mitchgrogg/rita-devtools-tui/releases) onto another machine to configure rita-mitm remotely — set `RITA_MITM_URL` to `http://<pi-eth0-ip>:8082` before running it.
 - **SSH login** will show the mitmproxy web UI URL.
 
@@ -91,7 +91,7 @@ All scripts must be run as root (`sudo`).
 
 ## rita-mitm
 
-rita-mitm is a mitmproxy addon that exposes a REST API (port 8082) for configuring request delays and response alterations at runtime. Configuration is persisted to a Docker volume and survives container restarts.
+rita-mitm is a mitmproxy addon that exposes a REST API (port 8082) for configuring request delays and request/response alterations at runtime. Configuration is persisted to a Docker volume and survives container restarts.
 
 ### TUI App
 
@@ -114,10 +114,18 @@ The REST API can also be used directly or with custom tooling.
 | `POST`   | `/api/delays/patterns`         | Add delay pattern `{"pattern": "...", "delay_ms": 1000}`                   |
 | `DELETE` | `/api/delays/patterns`         | Delete all delay patterns                                                  |
 | `DELETE` | `/api/delays/patterns/<index>` | Delete one by index                                                        |
-| `GET`    | `/api/alterations`             | List alteration rules                                                      |
-| `POST`   | `/api/alterations`             | Add alteration `{"url_pattern": "...", "status_code": 503, "body": "..."}` |
-| `DELETE` | `/api/alterations`             | Delete all alterations                                                     |
-| `DELETE` | `/api/alterations/<index>`     | Delete one by index                                                        |
+| `GET`    | `/api/alterations/request`     | List request alteration rules                                              |
+| `POST`   | `/api/alterations/request`     | Add request alteration `{"url_pattern": "...", "rewrite_url": "...", "body": "..."}` |
+| `DELETE` | `/api/alterations/request`     | Delete all request alterations                                             |
+| `DELETE` | `/api/alterations/request/<index>` | Delete one by index                                                    |
+| `GET`    | `/api/alterations/response`    | List response alteration rules                                             |
+| `POST`   | `/api/alterations/response`    | Add response alteration `{"url_pattern": "...", "status_code": 503, "body": "..."}` |
+| `DELETE` | `/api/alterations/response`    | Delete all response alterations                                            |
+| `DELETE` | `/api/alterations/response/<index>` | Delete one by index                                                   |
+| `GET`    | `/api/alterations`             | _Deprecated_ alias for `/api/alterations/response`                         |
+| `POST`   | `/api/alterations`             | _Deprecated_ alias for `/api/alterations/response`                         |
+| `DELETE` | `/api/alterations`             | _Deprecated_ alias for `/api/alterations/response`                         |
+| `DELETE` | `/api/alterations/<index>`     | _Deprecated_ alias for `/api/alterations/response/<index>`                 |
 
 ### Examples
 
@@ -129,7 +137,13 @@ curl -X PUT http://localhost:8082/api/delays/global -d '{"delay_ms": 1000}'
 curl -X POST http://localhost:8082/api/delays/patterns -d '{"pattern": "/api/.*", "delay_ms": 3000}'
 
 # Simulate a 503 error for health check endpoints
-curl -X POST http://localhost:8082/api/alterations -d '{"url_pattern": "/health", "status_code": 503, "body": "down"}'
+curl -X POST http://localhost:8082/api/alterations/response -d '{"url_pattern": "/health", "status_code": 503, "body": "down"}'
+
+# Point every production API call at staging instead
+curl -X POST http://localhost:8082/api/alterations/request -d '{"url_pattern": "^https://api\\.prod\\.com", "rewrite_url": "https://api.staging.com"}'
+
+# Replace the body of every login request
+curl -X POST http://localhost:8082/api/alterations/request -d '{"url_pattern": "/v1/login", "body": "{\"user\": \"test\"}"}'
 
 # View current config
 curl http://localhost:8082/api/config
@@ -143,6 +157,23 @@ curl -X DELETE http://localhost:8082/api/delays/patterns
 Delays use the "minimum total time" approach: the delay value represents the minimum total request time, not additional delay. If you set a 5-second delay and the upstream responds in 2 seconds, the addon sleeps for the remaining 3 seconds. If the upstream takes longer than the configured delay, no extra sleep is added.
 
 Pattern-specific delays override the global delay (first regex match wins). Patterns are matched against the full URL including scheme, host, path, and query string.
+
+### How alterations work
+
+Alterations come in two kinds, each an ordered list of rules under `alterations.request` and `alterations.response` in the config. Within a kind, the first rule whose `url_pattern` regex matches wins; the two kinds are matched independently, so a single flow can be hit by one of each.
+
+**Request alterations** are applied before the request leaves the proxy:
+
+- `rewrite_url` retargets the request. It is a regular expression replacement applied to the portion of the URL that `url_pattern` matched, so the rest of the URL survives and backreferences work — matching `^https://api\.prod\.com` with `rewrite_url` `https://api.staging.com` turns `https://api.prod.com/v1/users?id=3` into `https://api.staging.com/v1/users?id=3`. The `Host` header is updated to follow.
+
+  **Anchor the pattern with `^` when the replacement is a full URL.** Because only the matched portion is replaced, an unanchored pattern splices the replacement into the middle of the URL — pattern `api\.prod\.com` with replacement `https://api.staging.com` would produce `https://https://api.staging.com/...`, an unroutable host that the client sees as a connection failure. rita-mitm detects this, skips the rewrite, and logs a warning naming the rule rather than corrupting the request. Rewrites that only touch the path (pattern `/v1/`, replacement `/v2/`) do not need anchoring. A rewrite whose result is not an absolute `http`/`https` URL, or whose replacement template is invalid, is skipped and logged the same way.
+- `body` replaces the outgoing request body.
+
+**Response alterations** are applied to the response coming back, overwriting `status_code` and/or `body`. The upstream request is still made — request alterations cannot short-circuit a flow.
+
+Rules are matched against the full URL including scheme, host, path, and query string. Response alterations and delays match the URL **after** any request rewrite, i.e. where the request actually went.
+
+Configurations written before request alterations existed stored `alterations` as a flat list. Those are migrated to `alterations.response` when they are loaded, and the old `/api/alterations` routes still work.
 
 ## License
 
